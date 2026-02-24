@@ -163,6 +163,8 @@ async def initialize_fundaments() -> Dict[str, Any]:
     return fundaments
 
 
+## Main async
+
 async def main():
     """
     The main asynchronous function of the application.
@@ -173,18 +175,18 @@ async def main():
 
     try:
         # -------------------------------------------------------
-        # APP LOADER - wählt App-Modus via APP_MODE Env-Var
+        # APP LOADER - select App-Modus via APP_MODE Env-Var
         # -------------------------------------------------------
         app_mode = os.getenv("APP_MODE", "mcp").lower()
 
         if app_mode == "mcp":
-            logger.info("Starte MCP Hub (app/mcp.py)...")
+            logger.info("Start of MCP Hub (app/mcp.py)...")
             try:
                 from app.mcp import start_mcp
                 await start_mcp(fundaments)
             except ImportError as e:
-                logger.critical(f"app/mcp.py konnte nicht geladen werden: {e}")
-                logger.critical("Stelle sicher dass FastMCP installiert ist: pip install fastmcp")
+                logger.critical(f"app/mcp.py not found bro/sis!: {e}")
+                logger.critical("Make sure FastMCP is installed: pip install fastmcp")
                 raise
 
         elif app_mode == "app":
@@ -193,7 +195,7 @@ async def main():
             await start_application(fundaments)
 
         else:
-            logger.warning(f"Unbekannter APP_MODE: '{app_mode}'. Nutze 'mcp' oder 'app'.")
+            logger.warning(f"Unkown APP_MODE: '{app_mode}'. will use  'mcp' oder 'app'.")
 
     finally:
         # Ensure the database pool is closed gracefully on exit
