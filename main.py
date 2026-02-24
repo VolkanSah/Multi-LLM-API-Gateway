@@ -1,10 +1,11 @@
 # PyFundaments: A Secure Python Architecture
 # Copyright 2008-2025 - Volkan Kücükbudak
-# Apache License V. 2 + esol
+# Apache License V. 2 + ESOL 1.1
 # Repo: https://github.com/VolkanSah/PyFundaments
-# main.py for mcp client in sandbox
+# main.py
 # This is the main entry point of the application.
-# It now handles asynchronous initialization of the fundament modules.
+# It handles asynchronous initialization of the fundament modules.
+
 import sys
 import logging
 import asyncio
@@ -163,8 +164,6 @@ async def initialize_fundaments() -> Dict[str, Any]:
     return fundaments
 
 
-## Main async
-
 async def main():
     """
     The main asynchronous function of the application.
@@ -175,27 +174,29 @@ async def main():
 
     try:
         # -------------------------------------------------------
-        # APP LOADER - select App-Modus via APP_MODE Env-Var
+        # APP LOADER - select app mode via APP_MODE env var
+        # 'mcp' -> app/mcp.py  (default)
+        # 'app' -> app/app.py
         # -------------------------------------------------------
         app_mode = os.getenv("APP_MODE", "mcp").lower()
 
         if app_mode == "mcp":
-            logger.info("Start of MCP Hub (app/mcp.py)...")
+            logger.info("Starting MCP Hub (app/mcp.py)...")
             try:
                 from app.mcp import start_mcp
                 await start_mcp(fundaments)
             except ImportError as e:
-                logger.critical(f"app/mcp.py not found bro/sis!: {e}")
+                logger.critical(f"app/mcp.py could not be loaded: {e}")
                 logger.critical("Make sure FastMCP is installed: pip install fastmcp")
                 raise
 
         elif app_mode == "app":
-            logger.info("Starte Standard-App (app/app.py)...")
+            logger.info("Starting standard app (app/app.py)...")
             from app.app import start_application
             await start_application(fundaments)
 
         else:
-            logger.warning(f"Unkown APP_MODE: '{app_mode}'. will use  'mcp' oder 'app'.")
+            logger.warning(f"Unknown APP_MODE: '{app_mode}'. Valid options: 'mcp' or 'app'.")
 
     finally:
         # Ensure the database pool is closed gracefully on exit
