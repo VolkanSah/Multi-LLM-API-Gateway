@@ -1,8 +1,20 @@
+# Universal-MCP-server-sandox
+
+README.MD
+.gitignore
+main.py
+app/*
+
+
+
+
+
 .env
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
 *$py.class
+
 
 # C extensions
 *.so
