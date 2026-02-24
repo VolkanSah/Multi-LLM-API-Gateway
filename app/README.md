@@ -1,1 +1,2 @@
-Some examples that imports fundaments.
+Sandboxed mcp server 
+
