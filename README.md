@@ -10,7 +10,7 @@ pinned: false
 
 # Universal MCP Hub on PyFundaments
 
-Universal MCP-Server basierend auf [PyFundaments](https://github.com/VolkanSah/PyFundaments).
+Universal MCP-Server basierend auf [PyFundaments](PyFundaments_README.md).
 
 ## Setup
 
