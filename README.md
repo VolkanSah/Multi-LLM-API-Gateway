@@ -1,16 +1,17 @@
 ---
 title: Universal MCP Hub
-emoji: 🔐
-colorFrom: blue
-colorTo: indigo
+emoji: 🐢
+colorFrom: red
+colorTo: yellow
 sdk: docker
-app_port: 7860
 pinned: false
+license: apache-2.0
+short_description: Universal MCP Hub (Sandboxed)
 ---
 
 # Universal MCP Hub (Sandboxed)
 
-> For advanced use, have a look at [PyFundaments_README.md](PyFundaments_README.md) and the `docs/` folder.
+> For advanced use, have a look at [PyFundaments_README.md](PyFundaments.md) and the `docs/` folder.
 
 Universal MCP Server running in **paranoid mode** — built on [PyFundaments](https://github.com/VolkanSah/PyFundaments) and licensed under ESOL.
 
