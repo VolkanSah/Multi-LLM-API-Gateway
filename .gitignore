@@ -2,9 +2,8 @@
 
 README.MD
 .gitignore
-main.py
 app/*
-app/mcp.py
+
 
 
 
