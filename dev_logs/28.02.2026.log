@@ -1,0 +1,56 @@
+# fixed mcp minimal build 
+# app.py + mcp.üy + config.py + .pyfun
+===== Application Startup at 2026-02-28 15:18:36 =====
+
+2026-02-28 15:19:23,716 - pyfundaments_debug - INFO - ==== PYFUNDAMENTS DEBUG STARTUP (2026-02-28 15:19:23.716586) ====
+2026-02-28 15:19:23,716 - pyfundaments_debug - INFO - Python version: 3.10.19 (main, Feb 24 2026, 19:47:39) [GCC 14.2.0]
+2026-02-28 15:19:23,716 - pyfundaments_debug - INFO - CWD: /app
+2026-02-28 15:19:23,716 - pyfundaments_debug - INFO - sys.path: ['/app', '/usr/local/lib/python310.zip', '/usr/local/lib/python3.10', '/usr/local/lib/python3.10/lib-dynload', '/usr/local/lib/python3.10/site-packages']
+2026-02-28 15:19:23,716 - pyfundaments_debug - INFO - fundaments exists: True
+2026-02-28 15:19:23,717 - pyfundaments_debug - INFO - __init__.py exists: True | readable: True
+2026-02-28 15:19:23,717 - pyfundaments_debug - INFO - access_control.py exists: True | readable: True
+2026-02-28 15:19:23,717 - pyfundaments_debug - INFO - postgresql.py exists: True | readable: True
+2026-02-28 15:19:23,717 - pyfundaments_debug - INFO - config_handler.py exists: True | readable: True
+2026-02-28 15:19:23,717 - pyfundaments_debug - INFO - security.py exists: True | readable: True
+2026-02-28 15:19:23,717 - pyfundaments_debug - INFO - user_handler.py exists: True | readable: True
+2026-02-28 15:19:23,717 - pyfundaments_debug - INFO - encryption.py exists: True | readable: True
+2026-02-28 15:19:23,717 - pyfundaments_debug - INFO - Listing fundaments contents: ['__init__.py', 'access_control.py', 'config_handler.py', 'debug.py', 'encryption.py', 'postgresql.py', 'security.py', 'user_handler.py', '__pycache__']
+2026-02-28 15:19:23,717 - pyfundaments_debug - INFO - fundaments importable: True
+2026-02-28 15:19:23,717 - pyfundaments_debug - INFO - Name conflict in sys.modules: ['fundaments']
+2026-02-28 15:19:23,717 - pyfundaments_debug - INFO - ==== PYFUNDAMENTS DEBUG END ====
+2026-02-28 15:19:23,718 - main_app_loader - INFO - Starting main.py...
+2026-02-28 15:19:23,718 - main_app_loader - INFO - Starting conditional initialization of fundament modules...
+2026-02-28 15:19:23,718 - fundaments.postgresql - INFO - DSN used for DB connection (masked): postgresql://ep-small-hat-a9z4zok6-pooler.gwc.azure.neon.tech/neondb?sslmode=require&channel_binding=require&connect_timeout=5&keepalives_idle=60
+2026-02-28 15:19:23,718 - fundaments.postgresql - INFO - Initializing secure database pool...
+2026-02-28 15:19:25,233 - fundaments.postgresql - CRITICAL - CRITICAL ERROR: SSL connection is not active!
+2026-02-28 15:19:25,233 - fundaments.postgresql - WARNING - SSL check via pg_stat_ssl not possible (cloud restriction). Assuming SSL is active due to sslmode=require.
+2026-02-28 15:19:25,330 - fundaments.postgresql - INFO - Secure database pool initialized.
+2026-02-28 15:19:25,330 - main_app_loader - INFO - Database service initialized.
+2026-02-28 15:19:25,330 - main_app_loader - INFO - Encryption keys not found or using defaults, skipping encryption initialization.
+2026-02-28 15:19:25,330 - main_app_loader - INFO - Access Control service initialized.
+2026-02-28 15:19:25,330 - main_app_loader - INFO - User Handler service initialized.
+2026-02-28 15:19:25,331 - security - WARNING - Encryption service not available. Encryption/decryption features will be disabled.
+2026-02-28 15:19:25,331 - security - INFO - Security manager initialized and ready.
+2026-02-28 15:19:25,331 - main_app_loader - INFO - Security manager initialized.
+2026-02-28 15:19:25,331 - main_app_loader - INFO - Successfully initialized services: config, db, access_control, user_handler, security
+2026-02-28 15:19:25,331 - main_app_loader - INFO - Fundament modules are ready for the app logic.
+2026-02-28 15:19:25,691 - application - INFO - Application starting...
+2026-02-28 15:19:25,691 - application - INFO - Auth services active (user_handler + security).
+2026-02-28 15:19:25,691 - application - INFO - Access control active.
+2026-02-28 15:19:25,691 - mcp - INFO - MCP Hub initializing...
+2026-02-28 15:19:25,692 - app.config - INFO - .pyfun loaded. Sections: ['HUB', 'HUB_LIMITS', 'PROVIDERS', 'LLM_PROVIDERS', 'SEARCH_PROVIDERS', 'MODELS', 'TOOLS', 'DB_SYNC', 'DEBUG']
+2026-02-28 15:19:26,288 - mcp - INFO - LLM provider 'anthropic' skipped — ENV key 'ANTHROPIC_API_KEY' not set.
+2026-02-28 15:19:26,288 - mcp - INFO - LLM provider 'gemini' skipped — ENV key 'GEMINI_API_KEY' not set.
+2026-02-28 15:19:26,288 - mcp - INFO - LLM provider 'openrouter' skipped — ENV key 'OPENROUTER_API_KEY' not set.
+2026-02-28 15:19:26,291 - mcp - INFO - Tool registered: hf_inference (model: mistralai/Mistral-7B-Instruct-v0.3)
+2026-02-28 15:19:26,291 - mcp - INFO - Search provider 'brave' skipped — ENV key 'BRAVE_API_KEY' not set.
+2026-02-28 15:19:26,291 - mcp - INFO - Search provider 'tavily' skipped — ENV key 'TAVILY_API_KEY' not set.
+2026-02-28 15:19:26,293 - mcp - INFO - Tool registered: list_active_tools
+2026-02-28 15:19:26,295 - mcp - INFO - Tool registered: health_check
+2026-02-28 15:19:26,295 - mcp - INFO - MCP Hub initialized.
+2026-02-28 15:19:26,295 - application - INFO - Starting hypercorn on port 7860...
+2026-02-28 15:19:26,295 - application - INFO - All services running.
+[2026-02-28 15:19:26 +0000] [1] [INFO] Running on http://0.0.0.0:7860 (CTRL + C to quit)
+2026-02-28 15:19:26,296 - hypercorn.error - INFO - Running on http://0.0.0.0:7860 (CTRL + C to quit)
+
+===== Application STOP =====
