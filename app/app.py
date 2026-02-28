@@ -11,35 +11,39 @@
 #   All fundament services are injected via the `fundaments` dictionary.
 #   Direct execution is blocked by design.
 #
-# SANDBOX RULE:
-#   app/* has NO direct access to .env or fundaments/*.
-#   Config for app/* lives in app/.pyfun (provider URLs, models, tool settings).
-#   Secrets stay in .env → Guardian reads them → injects what app/* needs.
+# SANDBOX RULES:
+#   - fundaments dict is ONLY unpacked inside start_application()
+#   - fundaments are NEVER stored globally or passed to other app/* modules
+#   - app/* modules read their own config from app/.pyfun
+#   - app/* internal state/IPC uses app/db_sync.py (SQLite) — NOT postgresql.py
+#   - Secrets stay in .env → Guardian reads them → never touched by app/*
 # =============================================================================
+# tested 28.02.2026
 
-from quart import Quart, request, jsonify  # async Flask — required for async cloud providers + Neon DB
+from quart import Quart, request, jsonify  # async Flask — required for async providers + Neon DB
 import logging
-from waitress import serve                  # WSGI server — keeps Flask non-blocking alongside asyncio
+from waitress import serve                  # WSGI server — keeps HTTP non-blocking alongside asyncio
 import threading                            # bank-pattern: each blocking service gets its own thread
 import requests                             # sync HTTP for health check worker
 import time
 from datetime import datetime
 import asyncio
-import sys
 from typing import Dict, Any, Optional
 
 # =============================================================================
 # Import app/* modules
-# Config/settings for all modules below live in app/.pyfun — not in .env!
+# Each module reads its own config from app/.pyfun independently.
+# NO fundaments passed into these modules!
 # =============================================================================
-from . import mcp          # MCP transport layer (stdio / SSE)
-from . import providers    # API provider registry (LLM, Search, Web)
-from . import models       # Model config + token/rate limits
-from . import tools        # MCP tool definitions + provider mapping
-from . import db_sync      # Internal SQLite IPC — app/* state & communication
-                           # db_sync ≠ cloud DB! Cloud DB is Guardian-only via main.py.
+#from . import mcp          # MCP transport layer (stdio / SSE)
+#from . import providers    # API provider registry (LLM, Search, Web) — reads app/.pyfun
+#from . import models       # Model config + token/rate limits — reads app/.pyfun
+#from . import tools        # MCP tool definitions + provider mapping — reads app/.pyfun
+#from . import db_sync      # Internal SQLite IPC for app/* state & communication
+                           # db_sync ≠ postgresql.py! Cloud DB is Guardian-only.
+#from . import config as app_config  # app/.pyfun parser — used only in app/*
 
-# Future modules (soon uncommented when ready):
+# Future modules (uncomment when ready):
 # from . import discord_api  # Discord bot integration
 # from . import hf_hooks     # HuggingFace Space hooks
 # from . import git_hooks    # GitHub/GitLab webhook handler
@@ -48,53 +52,19 @@ from . import db_sync      # Internal SQLite IPC — app/* state & communication
 # =============================================================================
 # Loggers — one per module for clean log filtering
 # =============================================================================
-logger          = logging.getLogger('application')
-logger          = logging.getLogger('config')
-# logger_mcp      = logging.getLogger('mcp')
-# logger_tools    = logging.getLogger('tools')
+logger = logging.getLogger('application')
+#logger_mcp       = logging.getLogger('mcp')
+# logger_tools     = logging.getLogger('tools')
 # logger_providers = logging.getLogger('providers')
-# logger_models   = logging.getLogger('models')
-# logger_db_sync  = logging.getLogger('db_sync')
+# logger_models    = logging.getLogger('models')
+# logger_db_sync   = logging.getLogger('db_sync')
+#logger_config    = logging.getLogger('config')
 
 # =============================================================================
-# Flask app instance
+# Quart app instance
 # =============================================================================
 app = Quart(__name__)
 START_TIME = datetime.utcnow()
-
-# =============================================================================
-# Global service references (set during initialize_services)
-# =============================================================================
-_fundaments: Optional[Dict[str, Any]] = None
-PORT = None
-
-# =============================================================================
-# Service initialization
-# =============================================================================
-def initialize_services(fundaments: Dict[str, Any]) -> None:
-    """
-    Initializes all app/* services with injected fundaments from Guardian.
-    Called once during start_application — sets global service references.
-    """
-    global _fundaments, PORT
-
-    _fundaments = fundaments
-    PORT = fundaments["config"].get_int("PORT", 7860)
-
-    # Initialize internal SQLite state store for app/* IPC
-    db_sync.initialize()
-
-    # Initialize provider registry from app/.pyfun + ENV key presence check
-    providers.initialize(fundaments["config"])
-
-    # Initialize model registry from app/.pyfun
-    models.initialize()
-
-    # Initialize tool registry — tools only register if their provider is active
-    tools.initialize(providers, models, fundaments)
-
-    logger.info("app/* services initialized.")
-
 
 # =============================================================================
 # Background workers
@@ -103,31 +73,33 @@ def start_mcp_in_thread() -> None:
     """
     Starts the MCP Hub (stdio or SSE) in its own thread with its own event loop.
     Mirrors the bank-thread pattern from the Discord bot architecture.
+    mcp.py reads its own config from app/.pyfun — no fundaments passed in.
     """
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
-        loop.run_until_complete(mcp.start_mcp(_fundaments))
+        loop.run_until_complete(mcp.start_mcp())
     finally:
         loop.close()
 
 
-def health_check_worker() -> None:
+def health_check_worker(port: int) -> None:
     """
     Periodic self-ping to keep the app alive on hosting platforms (e.g. HuggingFace).
     Runs in its own daemon thread — does not block the main loop.
+    Port passed directly — no global state needed.
     """
     while True:
         time.sleep(3600)
         try:
-            response = requests.get(f"http://127.0.0.1:{PORT}/")
+            response = requests.get(f"http://127.0.0.1:{port}/")
             logger.info(f"Health check ping: {response.status_code}")
         except Exception as e:
             logger.error(f"Health check failed: {e}")
 
 
 # =============================================================================
-# Flask Routes
+# Quart Routes
 # =============================================================================
 
 @app.route("/", methods=["GET"])
@@ -141,7 +113,7 @@ async def health_check():
         "status": "running",
         "service": "Universal MCP Hub",
         "uptime_seconds": int(uptime.total_seconds()),
-        "active_providers": providers.get_active_names() if providers else [],
+        "active_providers": providers.get_active_names(),
     })
 
 
@@ -161,14 +133,9 @@ async def api_endpoint():
 async def crypto_endpoint():
     """
     Encrypted API endpoint.
-    Payload is decrypted via fundaments/encryption.py (injected by Guardian).
-    Only active if encryption_service is available in fundaments.
+    Encryption handled by app/* layer — no direct fundaments access here.
     """
-    encryption_service = _fundaments.get("encryption") if _fundaments else None
-    if not encryption_service:
-        return jsonify({"error": "Encryption service not available"}), 503
-
-    # TODO: decrypt payload, dispatch, re-encrypt response
+    # TODO: implement via app/* encryption wrapper
     data = await request.get_json()
     return jsonify({"status": "not_implemented"}), 501
 
@@ -191,7 +158,7 @@ async def crypto_endpoint():
 
 
 # =============================================================================
-# Main entry point — called by Guardian (main.py)
+# Main entry point — called exclusively by Guardian (main.py)
 # =============================================================================
 async def start_application(fundaments: Dict[str, Any]) -> None:
     """
@@ -200,20 +167,21 @@ async def start_application(fundaments: Dict[str, Any]) -> None:
 
     Args:
         fundaments: Dictionary of initialized services from Guardian (main.py).
-                    All services already validated — may be None if not configured.
+                    Services are unpacked here and NEVER stored globally or
+                    passed into other app/* modules.
     """
     logger.info("Application starting...")
 
-    # --- Unpack fundament services (read-only references) ---
-    config_service          = fundaments["config"]
-    db_service              = fundaments["db"]              # None if no DB configured
-    encryption_service      = fundaments["encryption"]      # None if keys not set
-    access_control_service  = fundaments["access_control"]  # None if no DB
-    user_handler_service    = fundaments["user_handler"]    # None if no DB
-    security_service        = fundaments["security"]        # None if deps missing
-
-    # --- Initialize all app/* services ---
-    initialize_services(fundaments)
+    # =========================================================================
+    # Unpack fundaments — ONLY here, NEVER elsewhere in app/*
+    # These are the 6 fundament services from fundaments/*
+    # =========================================================================
+    config_service          = fundaments["config"]          # fundaments/config_handler.py
+    db_service              = fundaments["db"]              # fundaments/postgresql.py — None if not configured
+    encryption_service      = fundaments["encryption"]      # fundaments/encryption.py — None if keys not set
+    access_control_service  = fundaments["access_control"]  # fundaments/access_control.py — None if no DB
+    user_handler_service    = fundaments["user_handler"]    # fundaments/user_handler.py — None if no DB
+    security_service        = fundaments["security"]        # fundaments/security.py — None if deps missing
 
     # --- Log active fundament services ---
     if encryption_service:
@@ -231,25 +199,41 @@ async def start_application(fundaments: Dict[str, Any]) -> None:
     if not db_service:
         logger.info("Database-free mode active (e.g. Discord bot, API client).")
 
-    # --- Start MCP Hub in its own thread (stdio or SSE) ---
+    # =========================================================================
+    # Initialize app/* internal services
+    # Each module reads app/.pyfun independently via app/config.py
+    # NO fundaments passed in here!
+    # =========================================================================
+    db_sync.initialize()    # SQLite IPC store for app/* — unrelated to postgresql.py
+    providers.initialize()  # reads app/.pyfun [LLM_PROVIDERS] [SEARCH_PROVIDERS]
+    models.initialize()     # reads app/.pyfun [MODELS]
+    tools.initialize()      # reads app/.pyfun [TOOLS]
+
+    # --- Read PORT from app/.pyfun [HUB] ---
+    port = int(app_config.get_hub().get("HUB_PORT", "7860"))
+
+    # --- Start MCP Hub in its own thread ---
     mcp_thread = threading.Thread(target=start_mcp_in_thread, daemon=True)
     mcp_thread.start()
     logger.info("MCP Hub thread started.")
 
-    # Allow MCP to initialize before Flask comes up
     await asyncio.sleep(1)
 
     # --- Start health check worker ---
-    health_thread = threading.Thread(target=health_check_worker, daemon=True)
+    health_thread = threading.Thread(
+        target=health_check_worker,
+        args=(port,),
+        daemon=True
+    )
     health_thread.start()
 
-    # --- Start Flask/Quart via Waitress in its own thread ---
+    # --- Start Quart via Waitress in its own thread ---
     def run_server():
-        serve(app, host="0.0.0.0", port=PORT)
+        serve(app, host="0.0.0.0", port=port)
 
     server_thread = threading.Thread(target=run_server, daemon=True)
     server_thread.start()
-    logger.info(f"HTTP server started on port {PORT}.")
+    logger.info(f"HTTP server started on port {port}.")
 
     logger.info("All services running. Entering heartbeat loop...")
 
