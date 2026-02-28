@@ -10,6 +10,10 @@
 #   NO direct access to fundaments/*, .env, or Guardian (main.py).
 #   All config comes from app/.pyfun via app/config.py.
 #
+#   MCP SSE transport runs through Quart/hypercorn via /mcp route.
+#   All MCP traffic can be intercepted, logged, and transformed in app.py
+#   before reaching the MCP handler — this is by design.
+#
 # TOOL REGISTRATION PRINCIPLE:
 #   Tools are only registered if their required ENV key exists.
 #   No key = no tool = no crash. Server always starts, just with fewer tools.
@@ -25,21 +29,21 @@ from . import config as app_config  # reads app/.pyfun — only config source fo
 
 logger = logging.getLogger('mcp')
 
+# Global MCP instance — initialized once via initialize()
+_mcp = None
 
-async def start_mcp() -> None:
-    """
-    Main entry point for the MCP Hub.
-    Called by app/app.py in its own thread/event loop.
-    Reads all config from app/.pyfun via app/config.py.
-    NO fundaments passed in — sandboxed.
-    """
-    logger.info("MCP Hub starting...")
 
-    # --- Load transport config from app/.pyfun [HUB] ---
-    hub_cfg   = app_config.get_hub()
-    transport = os.getenv("MCP_TRANSPORT", hub_cfg.get("HUB_TRANSPORT", "stdio")).lower()
-    host      = os.getenv("HOST", hub_cfg.get("HUB_HOST", "0.0.0.0"))
-    port      = int(os.getenv("PORT", hub_cfg.get("HUB_PORT", "7860")))
+async def initialize() -> None:
+    """
+    Initializes the MCP instance and registers all tools.
+    Called once by app/app.py during startup.
+    No fundaments passed in — sandboxed.
+    """
+    global _mcp
+
+    logger.info("MCP Hub initializing...")
+
+    hub_cfg = app_config.get_hub()
 
     try:
         from mcp.server.fastmcp import FastMCP
@@ -47,7 +51,7 @@ async def start_mcp() -> None:
         logger.critical("FastMCP not installed. Run: pip install mcp")
         raise
 
-    mcp = FastMCP(
+    _mcp = FastMCP(
         name=hub_cfg.get("HUB_NAME", "Universal MCP Hub"),
         instructions=(
             f"{hub_cfg.get('HUB_DESCRIPTION', 'Universal MCP Hub on PyFundaments')} "
@@ -55,35 +59,33 @@ async def start_mcp() -> None:
         )
     )
 
-    # =========================================================================
-    # Tool Registration — MINIMAL BUILD
-    # Tools register only if their ENV key exists (value never read here!).
-    # Key NAMES come from app/.pyfun [LLM_PROVIDERS] / [SEARCH_PROVIDERS].
-    # =========================================================================
+    # --- Register tools ---
+    _register_llm_tools(_mcp)
+    _register_search_tools(_mcp)
+    # _register_db_tools(_mcp)   # uncomment when db_sync is ready
+    _register_system_tools(_mcp)
 
-    # --- LLM Tools ---
-    _register_llm_tools(mcp)
+    logger.info("MCP Hub initialized.")
 
-    # --- Search Tools ---
-    _register_search_tools(mcp)
 
-    # --- DB Tools --- (disabled until db_sync is ready)
-    # _register_db_tools(mcp)
+async def handle_request(request) -> None:
+    """
+    Handles incoming MCP SSE requests routed through Quart /mcp endpoint.
+    This is the interceptor point — add auth, logging, rate limiting here.
+    """
+    if _mcp is None:
+        logger.error("MCP not initialized — call initialize() first.")
+        from quart import jsonify
+        return jsonify({"error": "MCP not initialized"}), 503
 
-    # --- System Tools (always registered) ---
-    _register_system_tools(mcp)
+    # --- Interceptor hooks (add as needed) ---
+    # logger.debug(f"MCP request: {request.method} {request.path}")
+    # await _check_auth(request)
+    # await _rate_limit(request)
+    # await _log_payload(request)
 
-    # =========================================================================
-    # Start transport
-    # =========================================================================
-    if transport == "sse":
-        logger.info(f"MCP Hub starting via SSE on {host}:{port}")
-        await mcp.run_sse_async(host=host, port=port)
-    else:
-        logger.info("MCP Hub starting via stdio (local mode)")
-        await mcp.run_stdio_async()
-
-    logger.info("MCP Hub shut down.")
+    # --- Forward to FastMCP SSE handler ---
+    return await _mcp.handle_sse(request)
 
 
 # =============================================================================
@@ -100,13 +102,12 @@ def _register_llm_tools(mcp) -> None:
             logger.info(f"LLM provider '{name}' skipped — ENV key '{env_key}' not set.")
             continue
 
-        # Anthropic
         if name == "anthropic":
             import httpx
-            _key        = os.getenv(env_key)
-            _api_ver    = cfg.get("api_version_header", "2023-06-01")
-            _base_url   = cfg.get("base_url", "https://api.anthropic.com/v1")
-            _def_model  = cfg.get("default_model", "claude-haiku-4-5-20251001")
+            _key       = os.getenv(env_key)
+            _api_ver   = cfg.get("api_version_header", "2023-06-01")
+            _base_url  = cfg.get("base_url", "https://api.anthropic.com/v1")
+            _def_model = cfg.get("default_model", "claude-haiku-4-5-20251001")
 
             @mcp.tool()
             async def anthropic_complete(
@@ -135,12 +136,11 @@ def _register_llm_tools(mcp) -> None:
 
             logger.info(f"Tool registered: anthropic_complete (model: {_def_model})")
 
-        # Gemini
         elif name == "gemini":
             import httpx
-            _key        = os.getenv(env_key)
-            _base_url   = cfg.get("base_url", "https://generativelanguage.googleapis.com/v1beta")
-            _def_model  = cfg.get("default_model", "gemini-2.0-flash")
+            _key       = os.getenv(env_key)
+            _base_url  = cfg.get("base_url", "https://generativelanguage.googleapis.com/v1beta")
+            _def_model = cfg.get("default_model", "gemini-2.0-flash")
 
             @mcp.tool()
             async def gemini_complete(
@@ -164,13 +164,12 @@ def _register_llm_tools(mcp) -> None:
 
             logger.info(f"Tool registered: gemini_complete (model: {_def_model})")
 
-        # OpenRouter
         elif name == "openrouter":
             import httpx
-            _key        = os.getenv(env_key)
-            _base_url   = cfg.get("base_url", "https://openrouter.ai/api/v1")
-            _def_model  = cfg.get("default_model", "mistralai/mistral-7b-instruct")
-            _referer    = os.getenv("APP_URL", "https://huggingface.co")
+            _key       = os.getenv(env_key)
+            _base_url  = cfg.get("base_url", "https://openrouter.ai/api/v1")
+            _def_model = cfg.get("default_model", "mistralai/mistral-7b-instruct")
+            _referer   = os.getenv("APP_URL", "https://huggingface.co")
 
             @mcp.tool()
             async def openrouter_complete(
@@ -199,12 +198,11 @@ def _register_llm_tools(mcp) -> None:
 
             logger.info(f"Tool registered: openrouter_complete (model: {_def_model})")
 
-        # HuggingFace
         elif name == "huggingface":
             import httpx
-            _key        = os.getenv(env_key)
-            _base_url   = cfg.get("base_url", "https://api-inference.huggingface.co/models")
-            _def_model  = cfg.get("default_model", "mistralai/Mistral-7B-Instruct-v0.3")
+            _key       = os.getenv(env_key)
+            _base_url  = cfg.get("base_url", "https://api-inference.huggingface.co/models")
+            _def_model = cfg.get("default_model", "mistralai/Mistral-7B-Instruct-v0.3")
 
             @mcp.tool()
             async def hf_inference(
@@ -246,7 +244,6 @@ def _register_search_tools(mcp) -> None:
             logger.info(f"Search provider '{name}' skipped — ENV key '{env_key}' not set.")
             continue
 
-        # Brave
         if name == "brave":
             import httpx
             _key         = os.getenv(env_key)
@@ -278,13 +275,12 @@ def _register_search_tools(mcp) -> None:
 
             logger.info("Tool registered: brave_search")
 
-        # Tavily
         elif name == "tavily":
             import httpx
-            _key            = os.getenv(env_key)
-            _base_url       = cfg.get("base_url", "https://api.tavily.com/search")
-            _def_results    = int(cfg.get("default_results", "5"))
-            _incl_answer    = cfg.get("include_answer", "true").lower() == "true"
+            _key         = os.getenv(env_key)
+            _base_url    = cfg.get("base_url", "https://api.tavily.com/search")
+            _def_results = int(cfg.get("default_results", "5"))
+            _incl_answer = cfg.get("include_answer", "true").lower() == "true"
 
             @mcp.tool()
             async def tavily_search(query: str, max_results: int = _def_results) -> str:
@@ -323,20 +319,14 @@ def _register_system_tools(mcp) -> None:
     @mcp.tool()
     def list_active_tools() -> Dict[str, Any]:
         """Show active providers and configured integrations (key names only, never values)."""
-        llm     = app_config.get_active_llm_providers()
-        search  = app_config.get_active_search_providers()
-        hub     = app_config.get_hub()
+        llm    = app_config.get_active_llm_providers()
+        search = app_config.get_active_search_providers()
+        hub    = app_config.get_hub()
         return {
-            "hub": hub.get("HUB_NAME", "Universal MCP Hub"),
-            "version": hub.get("HUB_VERSION", ""),
-            "active_llm_providers": [
-                name for name, cfg in llm.items()
-                if os.getenv(cfg.get("env_key", ""))
-            ],
-            "active_search_providers": [
-                name for name, cfg in search.items()
-                if os.getenv(cfg.get("env_key", ""))
-            ],
+            "hub":                    hub.get("HUB_NAME", "Universal MCP Hub"),
+            "version":                hub.get("HUB_VERSION", ""),
+            "active_llm_providers":   [n for n, c in llm.items()    if os.getenv(c.get("env_key", ""))],
+            "active_search_providers":[n for n, c in search.items() if os.getenv(c.get("env_key", ""))],
         }
     logger.info("Tool registered: list_active_tools")
 
