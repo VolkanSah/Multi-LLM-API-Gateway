@@ -1,4 +1,29 @@
-# app/providers.py
+# =============================================================================
+# # app/providers.py
+# Universal MCP Hub (Sandboxed) - based on PyFundaments Architecture
+# Copyright 2026 - Volkan Kücükbudak
+# Apache License V. 2 + ESOL 1.1
+# Repo: https://github.com/VolkanSah/Universal-MCP-Hub-sandboxed
+# =============================================================================
+# ARCHITECTURE NOTE:
+#   This file lives exclusively in app/ and is ONLY started by app/app.py.
+#   NO direct access to fundaments/*, .env, or Guardian (main.py).
+#   All config comes from app/.pyfun via app/config.py.
+#
+#
+# TOOL REGISTRATION PRINCIPLE:
+#   Tools are registered via providers.py and models.py .
+#   No key = no provider = no tool = no crash.
+#   Adding a new provider = update .pyfun + providers.py only. Never touch mcp.py!
+#
+# DEPENDENCY CHAIN (app/* only, no fundaments!):
+#   config.py    → parses app/.pyfun — single source of truth
+#   providers.py → LLM + Search provider registry + fallback chain
+#   models.py    → model limits, costs, capabilities from .pyfun [MODELS]
+#   db_sync.py   → internal SQLite IPC (app/* state) — NOT postgresql.py!
+#   mcp.py       → registers tools only, delegates all logic to providers/*
+# =============================================================================
+
 from . import config
 import os
 import httpx
