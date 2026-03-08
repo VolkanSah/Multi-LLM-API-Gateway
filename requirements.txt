@@ -4,12 +4,10 @@ python-dotenv
 passlib
 cryptography
 
-# MCP Hub Dependencies (needed for app/*)
-# MCP over quat/hypercorn
+# MCP Hub Dependencies (needed for app/mcp.py)
 fastmcp
 httpx
 quart
-hypercorn
 
 # Additional dependencies for specific app types:
 # Uncomment what your application needs
@@ -30,3 +28,6 @@ requests
 # Alternative PostgreSQL driver (if not using asyncpg)
 #psycopg2-binary
 
+# Production web server
+# waitress
+hypercorn
