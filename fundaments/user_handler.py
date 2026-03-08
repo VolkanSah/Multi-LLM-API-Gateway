@@ -18,7 +18,7 @@ class Database:
     Supports dynamic path selection via environment variables with a 
     fallback to the local application directory.
     """
-    def __init__(self, db_name="cms_database.db"):
+    def __init__(self, db_name=".hub_state.db"):
         # 1. Attempt to load the database path from an environment variable
         # This allows for flexible configuration in production/Docker environments
         env_path = os.getenv("SQLITE_PATH")
