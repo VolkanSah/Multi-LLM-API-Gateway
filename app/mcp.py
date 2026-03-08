@@ -15,26 +15,27 @@
 #   before reaching this handler — this is by design.
 #
 # TOOL REGISTRATION PRINCIPLE:
-#   Tools are registered via providers.py and models.py — NOT hardcoded here.
+#   Tools are registered via tools.py — NOT hardcoded here.
 #   No key = no provider = no tool = no crash.
 #   Server always starts, just with fewer tools.
-#   Adding a new provider = update .pyfun + providers.py only. Never touch mcp.py.
+#   Adding a new tool = update .pyfun + providers.py only. Never touch mcp.py.
 #
 # DEPENDENCY CHAIN (app/* only, no fundaments!):
 #   config.py    → parses app/.pyfun — single source of truth
 #   providers.py → LLM + Search provider registry + fallback chain
 #   models.py    → model limits, costs, capabilities from .pyfun [MODELS]
+#   tools.py     → tool registry + execution — reads .pyfun [TOOLS]
 #   db_sync.py   → internal SQLite IPC (app/* state) — NOT postgresql.py!
-#   mcp.py       → registers tools only, delegates all logic to providers/*
+#   mcp.py       → registers tools only, delegates all logic to tools.py
 # =============================================================================
 
 import logging
-import os
 from typing import Dict, Any
 
-from . import config as app_config  # reads app/.pyfun — only config source for app/*
-from . import providers             # LLM + Search provider registry
-from . import models                # Model limits + capabilities
+from . import config as app_config
+from . import providers
+from . import models
+from . import tools
 
 logger = logging.getLogger('mcp')
 
@@ -55,10 +56,10 @@ async def initialize() -> None:
     No fundaments passed in — fully sandboxed.
 
     Registration order:
-        1. LLM tools       → via providers.py (key-gated)
-        2. Search tools    → via providers.py (key-gated)
-        3. System tools    → always registered, no key required
-        4. DB tools        → uncomment when db_sync.py is ready
+        1. LLM tools    → via tools.py + providers.py (key-gated)
+        2. Search tools → via tools.py + providers.py (key-gated)
+        3. System tools → always registered, no key required
+        4. DB tools     → uncomment when db_sync.py is ready
     """
     global _mcp
 
@@ -80,10 +81,10 @@ async def initialize() -> None:
         )
     )
 
-    # --- Initialize provider + model registries ---
-    # providers.py reads .pyfun + checks ENV keys — no fundaments involved
+    # --- Initialize registries ---
     providers.initialize()
     models.initialize()
+    tools.initialize()
 
     # --- Register MCP tools ---
     _register_llm_tools(_mcp)
@@ -101,7 +102,7 @@ async def initialize() -> None:
 async def handle_request(request) -> None:
     """
     Handles incoming MCP SSE requests routed through Quart /mcp endpoint.
-    This is the central interceptor point for all MCP traffic.
+    Central interceptor point for all MCP traffic.
     Add auth, logging, rate limiting, payload transformation here as needed.
     """
     if _mcp is None:
@@ -119,14 +120,14 @@ async def handle_request(request) -> None:
 
 
 # =============================================================================
-# Tool Registration — delegates all logic to providers.py / models.py
+# Tool Registration — delegates all logic to tools.py
 # =============================================================================
 
 def _register_llm_tools(mcp) -> None:
     """
     Register LLM completion tool.
-    Provider selection, fallback chain, and key checks are handled by providers.py.
-    Adding a new LLM provider = update .pyfun + providers.py. Never touch this function.
+    All logic delegated to tools.py → providers.py.
+    Adding a new LLM provider = update .pyfun + providers.py. Never touch this.
     """
     if not providers.list_active_llm():
         logger.info("No active LLM providers — llm_complete tool skipped.")
@@ -153,7 +154,8 @@ def _register_llm_tools(mcp) -> None:
         Returns:
             Model response as plain text string.
         """
-        return await providers.llm_complete(
+        return await tools.run(
+            tool_name="llm_complete",
             prompt=prompt,
             provider_name=provider,
             model=model,
@@ -166,8 +168,8 @@ def _register_llm_tools(mcp) -> None:
 def _register_search_tools(mcp) -> None:
     """
     Register web search tool.
-    Provider selection, fallback chain, and key checks are handled by providers.py.
-    Adding a new search provider = update .pyfun + providers.py. Never touch this function.
+    All logic delegated to tools.py → providers.py.
+    Adding a new search provider = update .pyfun + providers.py. Never touch this.
     """
     if not providers.list_active_search():
         logger.info("No active search providers — web_search tool skipped.")
@@ -192,8 +194,9 @@ def _register_search_tools(mcp) -> None:
         Returns:
             Formatted search results as plain text string.
         """
-        return await providers.search(
-            query=query,
+        return await tools.run(
+            tool_name="web_search",
+            prompt=query,
             provider_name=provider,
             max_results=max_results,
         )
@@ -204,7 +207,7 @@ def _register_search_tools(mcp) -> None:
 def _register_system_tools(mcp) -> None:
     """
     System tools — always registered, no ENV key required.
-    These tools expose hub status and model info without touching secrets.
+    Exposes hub status and model info without touching secrets.
     """
 
     @mcp.tool()
@@ -215,7 +218,7 @@ def _register_system_tools(mcp) -> None:
 
         Returns:
             Dict with hub info, active LLM providers, active search providers,
-            and available model names per provider.
+            available tools and model names.
         """
         hub = app_config.get_hub()
         return {
@@ -223,6 +226,7 @@ def _register_system_tools(mcp) -> None:
             "version":                 hub.get("HUB_VERSION", ""),
             "active_llm_providers":    providers.list_active_llm(),
             "active_search_providers": providers.list_active_search(),
+            "active_tools":            tools.list_all(),
             "available_models":        models.list_all(),
         }
 
