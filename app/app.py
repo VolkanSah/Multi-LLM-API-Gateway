@@ -79,14 +79,33 @@ async def health_check():
 
 @app.route("/api", methods=["POST"])
 async def api_endpoint():
-    """
-    Generic REST API endpoint for direct tool invocation.
-    Accepts JSON: { "tool": "tool_name", "params": { ... } }
-    Auth and validation handled by tools layer.
-    """
-    # TODO: implement tool dispatch via tools.invoke()
-    data = await request.get_json()
-    return jsonify({"status": "not_implemented", "received": data}), 501
+    try:
+        data      = await request.get_json()
+        tool_name = data.get("tool")
+        params    = data.get("params", {})
+
+        # System tools — handle directly, no prompt needed!
+        if tool_name == "list_active_tools":
+            return jsonify({"result": {
+                "active_tools":            tools.list_all(),
+                "active_llm_providers":    providers.list_active_llm(),
+                "active_search_providers": providers.list_active_search(),
+                "available_models":        models.list_all(),
+            }})
+
+        if tool_name == "health_check":
+            return jsonify({"result": {"status": "ok"}})
+
+        # rename 'provider' → 'provider_name' for tools.run()
+        if "provider" in params:
+            params["provider_name"] = params.pop("provider")
+
+        result = await tools.run(tool_name, **params)
+        return jsonify({"result": result})
+
+    except Exception as e:
+        logger.error(f"API error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/crypto", methods=["POST"])
