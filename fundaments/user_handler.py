@@ -2,7 +2,7 @@
 # Copyright 2008-2025 - Volkan Kücükbudak
 # Apache License V. 2
 # Repo: https://github.com/VolkanSah/PyFundaments
-# user_handler.py
+# root/fundaments/user_handler.py
 # A Python module for handling user authentication and session management.
 
 import sqlite3
@@ -11,15 +11,40 @@ from datetime import datetime, timedelta
 from passlib.hash import pbkdf2_sha256
 import os
 
+
 class Database:
     """
-    A simple placeholder class to simulate a database connection.
-    In a real application, you would use a proper ORM like SQLAlchemy
-    or a specific database driver.
+    Handles the SQLite database connection and initialization.
+    Supports dynamic path selection via environment variables with a 
+    fallback to the local application directory.
     """
     def __init__(self, db_name="cms_database.db"):
-        self.conn = sqlite3.connect(db_name)
+        # 1. Attempt to load the database path from an environment variable
+        # This allows for flexible configuration in production/Docker environments
+        env_path = os.getenv("SQLITE_PATH")
+        
+        if env_path:
+            # Use the absolute path provided by the environment variable
+            full_db_path = os.path.abspath(env_path)
+        else:
+            # Fallback logic: Locate the 'app' directory relative to this script
+            # Expected structure: root/fun/user_handler.py -> root/app/
+            base_path = os.path.dirname(os.path.abspath(__file__))
+            app_dir = os.path.join(base_path, "..", "app")
+            full_db_path = os.path.join(app_dir, db_name)
+
+        # 2. Ensure the target directory exists before attempting to connect
+        # SQLite can create the file, but not the parent folders.
+        db_dir = os.path.dirname(full_db_path)
+        if db_dir and not os.path.exists(db_dir):
+            os.makedirs(db_dir)
+            
+        # Initialize the connection and cursor
+        self.conn = sqlite3.connect(full_db_path)
         self.cursor = self.conn.cursor()
+        
+        # Log the active database path for debugging purposes
+        print(f"Database connected to: {full_db_path}")
 
     def execute(self, query, params=None):
         if params is None:
@@ -339,4 +364,7 @@ if __name__ == "__main__":
     db.close()
     
     # Optional: Clean up the database file after the run
+    # OLD
     # os.remove("cms_database.db")
+    # NEW : Clean up the database file after the run:
+    # os.remove(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "app", "cms_database.db"))
