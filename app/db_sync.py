@@ -47,22 +47,22 @@ _initialized: bool = False
 # =============================================================================
 
 async def initialize() -> None:
-    """
-    Initializes db_sync — reads SQLITE_PATH from .pyfun [DB_SYNC].
-    Creates app/* tables if they don't exist.
-    Called once by app/app.py during startup sequence.
-    No fundaments passed in — fully sandboxed.
-
-    Shares the SQLite file with user_handler.py (Guardian) but only
-    manages its own tables. Guardian tables are never touched here.
-    """
     global _db_path, _initialized
 
     if _initialized:
         return
 
     db_cfg   = config.get_db_sync()
-    _db_path = db_cfg.get("SQLITE_PATH", "app/.hub_state.db")
+    raw_path = db_cfg.get("SQLITE_PATH", "app/.hub_state.db")
+    
+    # HF Spaces: SPACE_ID is set → filesystem is read-only except /tmp/
+    import os
+    if os.getenv("SPACE_ID"):
+        filename = os.path.basename(raw_path)
+        _db_path = f"/tmp/{filename}"
+        logger.info(f"HF Space detected — SQLite relocated to {_db_path}")
+    else:
+        _db_path = raw_path
 
     await _init_tables()
 
