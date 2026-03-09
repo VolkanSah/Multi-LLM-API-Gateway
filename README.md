@@ -11,7 +11,7 @@ short_description: 'Universal MCP Server(Sandboxed) built on PyFundaments '
 
 # Universal MCP Hub (Sandboxed)
 
-> Universal MCP Server running in **paranoid mode** — built on [PyFundaments](PyFundaments.md) and licensed under [ESOL v1.1](ESOL).
+> Universal MCP Server running on simpleCity and **paranoidMode** — built on [PyFundaments](PyFundaments.md).
 
 Built because too many MCP servers exist with no sandboxing, hardcoded keys, and zero security thought. This one is different.
 
