@@ -301,7 +301,35 @@ SEARCH_TIMEOUT_SEC      = "30"
   provider_type       = "llm"
   default_provider    = "anthropic"
   timeout_sec         = "60"
+  system_prompt       = "You are a helpful assistant integrated into the Universal MCP Hub. Answer concisely and only what is asked."
   [TOOL.llm_complete_END]
+
+  [TOOL.code_review]
+  active              = "true"
+  description         = "Review code for bugs, security issues and improvements"
+  provider_type       = "llm"
+  default_provider    = "anthropic"
+  timeout_sec         = "60"
+  system_prompt       = "You are an expert code reviewer. Analyze the given code for bugs, security issues, and improvements. Be specific and concise."
+  [TOOL.code_review_END]
+
+  [TOOL.summarize]
+  active              = "true"
+  description         = "Summarize text into concise bullet points"
+  provider_type       = "llm"
+  default_provider    = "gemini"
+  timeout_sec         = "30"
+  system_prompt       = "You are a summarization expert. Summarize the given text in 3-5 bullet points. Be concise and accurate."
+  [TOOL.summarize_END]
+
+  [TOOL.translate]
+  active              = "true"
+  description         = "Translate text — auto-detects source language"
+  provider_type       = "llm"
+  default_provider    = "gemini"
+  timeout_sec         = "30"
+  system_prompt       = "You are a professional translator. Translate the given text accurately. Auto-detect the source language. Output only the translation, no explanation."
+  [TOOL.translate_END]
 
   [TOOL.web_search]
   active              = "true"
@@ -334,6 +362,15 @@ SEARCH_TIMEOUT_SEC      = "30"
   # provider_type     = "sandbox"
   # timeout_sec       = "30"
   # [TOOL.code_exec_END]
+
+  # [TOOL.shellmaster]
+  # active            = "false"
+  # description       = "Generate safe shell commands for requested tasks"
+  # provider_type     = "llm"
+  # default_provider  = "shellMaster"
+  # timeout_sec       = "30"
+  # system_prompt     = "You are ShellMaster. Generate safe shell commands for the requested task. Output ONLY the command, no explanation."
+  # [TOOL.shellmaster_END]
 
 [TOOLS_END]
 
