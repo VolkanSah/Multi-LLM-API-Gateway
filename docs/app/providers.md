@@ -1,15 +1,17 @@
-## Datei: `app/providers.py`
+## File: `app/providers.py`
 
-**Beschreibung:** Dieses Modul verwaltet die Anbindung an verschiedene LLM-Provider (Anthropic, Gemini, OpenRouter, HuggingFace) und implementiert eine automatische Ausfallsteuerung (Fallback-Chain).
+**Description:** This module manages the integration of LLM providers (Anthropic, Gemini, OpenRouter, HuggingFace) and implements an automatic fallback chain for provider failures.
 
-### Hauptfunktionen:
+### Main Functions
 
-* **`BaseProvider` & Subklassen**: Eine Basisklasse definiert die HTTP-Logik (`_post`), während spezifische Provider-Klassen (z. B. `GeminiProvider`) nur die jeweilige API-Antwort verarbeiten.
-* **`initialize()`**: Registriert beim Systemstart alle Provider, für die ein gültiger API-Key in der Umgebung (ENV) gefunden wurde.
-* **`llm_complete()`**: Die Kernfunktion für Textgenerierung. Sie versucht, eine Anfrage über den gewählten Provider zu stellen, und springt bei Fehlern automatisch zum nächsten Provider in der Fallback-Kette.
-* **`search()`**: Ein Platzhalter für zukünftige Web-Such-Provider (z. B. Brave oder Tavily).
-* **Registry-Helper (`list_active_llm`, `get`)**: Gibt Informationen darüber aus, welche Provider aktuell einsatzbereit und konfiguriert sind.
+- **`BaseProvider` & subclasses**: A base class handles all shared HTTP logic (`_post`), while provider-specific subclasses (e.g. `GeminiProvider`) only implement response parsing for their respective API.
+- **`initialize()`**: At startup, registers all providers for which a valid API key is found in the environment.
+- **`llm_complete()`**: The core function for text generation. Sends a request via the selected provider and automatically falls back to the next provider in the chain on failure.
+- **`search()`**: Placeholder for future web search providers (Brave, Tavily).
+- **Registry helpers (`list_active_llm`, `get`)**: Returns information about which providers are currently registered and active.
 
-### Kern-Logik:
+### Core Logic
 
-Das Modul nutzt eine **Fallback-Chain-Logik**. Schlägt ein Aufruf fehl, wird in der Konfiguration (`.pyfun`) nachgeschaut, welcher Ersatz-Provider (`fallback_to`) genutzt werden soll. Ein "Visited"-Set verhindert dabei Endlosschleifen. Das Prinzip lautet: Keine Keys vorhanden = keine Provider registriert = kein Systemabsturz.
+The module implements a **fallback chain**: if a provider call fails, `.pyfun` is consulted for the configured `fallback_to` replacement. A visited set prevents infinite loops. The principle: no keys = no providers registered = no crash.
+
+**Adding a new provider** requires two steps: add the class here and register it in `_PROVIDER_CLASSES`, then add the corresponding `[LLM_PROVIDER.name]` block in `app/.pyfun`. Commented dummy classes for OpenAI, Mistral, and xAI are included as copy-paste starting points.
