@@ -1,14 +1,14 @@
-## Datei: `app/db_sync.py`
+## File: `app/db_sync.py`
 
-**Beschreibung:** Dieses Modul verwaltet den internen Zustand des Hubs über eine lokale SQLite-Datenbank. Es dient als persistenter Zwischenspeicher (IPC) für App-spezifische Daten und Tool-Antworten, getrennt von der Hauptdatenbank des Systems.
+**Description:** This module manages the hub's internal state via a local SQLite database. It serves as a persistent IPC store for app-specific data and tool responses — completely separate from the Guardian-layer cloud database.
 
-### Hauptfunktionen:
+### Main Functions
 
-* **`initialize()`**: Setzt den Datenbankpfad (inkl. Sonderlogik für HuggingFace Spaces) und initialisiert die Tabellen.
-* **Key/Value Store (`write`, `read`, `delete`)**: Ermöglicht es anderen Modulen, einfache Daten (wie Statusmeldungen oder Konfigurationen) JSON-serialisiert in der Tabelle `hub_state` zu speichern.
-* **Tool-Caching (`cache_write`, `cache_read`)**: Speichert Tool-Antworten in `tool_cache`, um redundante API-Aufrufe zu vermeiden und Kosten zu sparen. Beinhaltet eine automatische Begrenzung der maximalen Einträge.
-* **`query()`**: Erlaubt die Ausführung von SQL-Abfragen, beschränkt diese jedoch strikt auf **READ-ONLY** (nur `SELECT`), um die Datenintegrität zu wahren.
+- **`initialize()`**: Sets the database path (including special handling for HuggingFace Spaces where `/tmp/` must be used) and creates the required tables.
+- **Key/Value store (`write`, `read`, `delete`)**: Allows other modules to store simple data (status messages, runtime state) JSON-serialized in the `hub_state` table.
+- **Tool caching (`cache_write`, `cache_read`)**: Stores tool responses in `tool_cache` to avoid redundant API calls and reduce costs. Automatically enforces a configurable entry limit.
+- **`query()`**: Exposes SQL query access but strictly limits it to **read-only** (`SELECT` only) to protect data integrity.
 
-### Kern-Logik:
+### Core Logic
 
-Das Modul folgt einer strikten **Table Ownership**: Es verwaltet ausschließlich `hub_state` und `tool_cache`. Der Zugriff auf systemkritische Tabellen (wie Benutzer oder Sessions) ist untersagt. Zudem ist es "Sandboxed" konzipiert, sodass es keinen direkten Zugriff auf globale Umgebungsvariablen benötigt, sondern alles über `config.py` bezieht.
+The module enforces strict **table ownership**: it only manages `hub_state` and `tool_cache`. Access to system-critical tables (`users`, `sessions`) is not possible from this layer — those belong exclusively to `fundaments/user_handler.py`. All configuration comes from `config.py` — no direct environment variable access.
