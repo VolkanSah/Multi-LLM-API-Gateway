@@ -10,59 +10,232 @@ short_description: 'Universal MCP Server(Sandboxed) built on PyFundaments '
 ---
 
 # Universal MCP Hub (Sandboxed)
-The only real (MCP) HUB you need!
 
-> running on simpleCity and **paranoidMode** — built on [PyFundaments](PyFundaments.md).
+> A production-grade MCP server that actually thinks about security.  
+> Built on [PyFundaments](PyFundaments.md) — running on **simpleCity** and **paranoidMode**.
 
-... because too many (Hype) MCP servers exist with no sandboxing, hardcoded keys, and zero security thought. 
+```
+No key → no tool → no crash → no exposed secrets
+```
 
+Most MCP servers are prompts dressed up as servers. This one has a real architecture.
 
-#### This one is different.
+---
 
-- **No key → no tool → no crash**
-- `main.py` = Guardian (controls everything, nothing bypasses it)
-- `app/app.py` receives only injected, validated services — never reads `os.environ` directly
-- Every tool is registered dynamically — only if the API key exists
+## Why this exists
 
-> *"I use AI as a tool, not as a replacement for thinking."* — Volkan Kücükbudak
+The MCP ecosystem is full of servers with hardcoded keys, zero sandboxing, and `os.environ` scattered everywhere. One misconfigured fork and your API keys are gone.
+
+This hub was built as the antidote:
+
+- **Structural sandboxing** — `app/*` can never touch `fundaments/` or `.env`. Not by convention. By design.
+- **Guardian pattern** — `main.py` is the only process that reads secrets. It injects validated services as a dict. `app/*` never sees the raw environment.
+- **Graceful degradation** — No key? Tool doesn't register. Server still starts. No crash, no error, no empty `None` floating around.
+- **Single source of truth** — All tool/provider/model config lives in `app/.pyfun`. Adding a provider = edit one file. No code changes.
+
+---
+
+## Architecture
+
+```
+main.py (Guardian)
+│
+│  reads .env / HF Secrets
+│  initializes fundaments/* conditionally
+│  injects validated services as dict
+│
+└──► app/app.py (Orchestrator, sandboxed)
+     │
+     │  unpacks fundaments ONCE, at startup, never stores globally
+     │  starts hypercorn (async ASGI)
+     │  routes: GET / | POST /api | GET+POST /mcp
+     │
+     ├── app/mcp.py         ← FastMCP + SSE handler
+     ├── app/tools.py       ← Tool registry (key-gated)
+     ├── app/provider.py    ← LLM + Search execution + fallback chain
+     ├── app/models.py      ← Model limits, costs, capabilities
+     ├── app/config.py      ← .pyfun parser (single source of truth)
+     └── app/db_sync.py     ← Internal SQLite IPC (app/* state only)
+                              ≠ fundaments/postgresql.py (Guardian-only)
+```
+
+**The sandbox is structural:**
+
+```python
+# app/app.py — fundaments are unpacked ONCE, NEVER stored globally
+async def start_application(fundaments: Dict[str, Any]) -> None:
+    config_service         = fundaments["config"]
+    db_service             = fundaments["db"]          # None if not configured
+    encryption_service     = fundaments["encryption"]  # None if keys missing
+    access_control_service = fundaments["access_control"]
+    ...
+    # From here: app/* reads its own config from app/.pyfun only.
+    # fundaments are never passed into other app/* modules.
+```
+
+`app/app.py` never calls `os.environ`. Never imports from `fundaments/`. Never reads `.env`.  
+This isn't documentation. It's enforced by the import structure.
+
+---
+
+## Two Databases — One Architecture
+
+This hub runs **two completely separate databases** with distinct responsibilities. This is not redundancy — it's a deliberate performance and security decision.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Guardian Layer (fundaments/*)                              │
+│                                                             │
+│  postgresql.py   → Cloud DB (e.g. Neon, Supabase)          │
+│                    asyncpg pool, SSL enforced               │
+│                    Neon-specific quirks handled             │
+│                    (statement_timeout stripped, keepalives) │
+│                                                             │
+│  user_handler.py → SQLite (users + sessions tables)        │
+│                    PBKDF2-SHA256 password hashing           │
+│                    Session validation incl. IP + UserAgent  │
+│                    Account lockout after 5 failed attempts  │
+│                    Path: SQLITE_PATH env var or app/        │
+│                                                             │
+└──────────────────────┬──────────────────────────────────────┘
+                       │ inject as fundaments dict
+                       ▼
+┌─────────────────────────────────────────────────────────────┐
+│  App Layer (app/*)                                          │
+│                                                             │
+│  db_sync.py  → SQLite (hub_state + tool_cache tables)      │
+│                aiosqlite (async, non-blocking)              │
+│                NEVER touches users/sessions tables          │
+│                Relocated to /tmp/ on HF Spaces auto        │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Why two SQLite databases?**
+
+`user_handler.py` (Guardian) owns `users` and `sessions` — authentication state that must be isolated from the app layer. `db_sync.py` (app/*) owns `hub_state` and `tool_cache` — fast, async IPC between tools that doesn't need to leave the process, let alone hit a cloud endpoint.
+
+A tool caching a previous LLM response or storing intermediate state between pipeline steps should never wait on a round-trip to Neon. Local SQLite is microseconds. Cloud PostgreSQL is 50-200ms per query. For tool-to-tool communication, that difference matters.
+
+**Table ownership — hard rule:**
+
+| Table | Owner | Access |
+| :--- | :--- | :--- |
+| `users` | `fundaments/user_handler.py` | Guardian only |
+| `sessions` | `fundaments/user_handler.py` | Guardian only |
+| `hub_state` | `app/db_sync.py` | app/* only |
+| `tool_cache` | `app/db_sync.py` | app/* only |
+
+`db_sync.py` uses the same SQLite path (`SQLITE_PATH`) as `user_handler.py` — same file, different tables, zero overlap. The `db_query` MCP tool exposes SELECT-only access to `hub_state` and `tool_cache`. It cannot reach `users` or `sessions`.
+
+**Cloud DB (postgresql.py):**
+
+Handles the heavy cases — persistent storage, workflow tool results that need to survive restarts, anything that benefits from a real relational DB. Neon-specific quirks are handled automatically: `statement_timeout` is stripped from the DSN (Neon doesn't support it), SSL is enforced at `require` minimum, keepalives are set, and terminated connections trigger an automatic pool restart.
+
+If no `DATABASE_URL` is set, the entire cloud DB layer is skipped cleanly. The app runs without it.
+
+---
+
+## Tools
+
+Tools register themselves at startup — only if the required API key exists in the environment. No key, no tool. The server always starts.
+
+| ENV Secret | Tool | Notes |
+| :--- | :--- | :--- |
+| `ANTHROPIC_API_KEY` | `llm_complete` | Claude Haiku / Sonnet / Opus |
+| `GEMINI_API_KEY` | `llm_complete` | Gemini 2.0 / 2.5 / 3.x Flash & Pro |
+| `OPENROUTER_API_KEY` | `llm_complete` | 100+ models via OpenRouter |
+| `HF_TOKEN` | `llm_complete` | HuggingFace Inference API |
+| `BRAVE_API_KEY` | `web_search` | Independent web index |
+| `TAVILY_API_KEY` | `web_search` | AI-optimized search with synthesized answers |
+| `DATABASE_URL` | `db_query` | Read-only SELECT — enforced at app level |
+| *(always)* | `list_active_tools` | Shows key names only — never values |
+| *(always)* | `health_check` | Status + uptime |
+| *(always)* | `get_model_info` | Limits, costs, capabilities per model |
+
+**Configured in `.pyfun` — not hardcoded:**
+
+```ini
+[TOOL.code_review]
+active           = "true"
+description      = "Review code for bugs, security issues and improvements"
+provider_type    = "llm"
+default_provider = "anthropic"
+timeout_sec      = "60"
+system_prompt    = "You are an expert code reviewer. Analyze the given code for bugs, security issues, and improvements. Be specific and concise."
+[TOOL.code_review_END]
+```
+
+Current built-in tools: `llm_complete`, `code_review`, `summarize`, `translate`, `web_search`, `db_query`  
+Future hooks (commented, ready): `image_gen`, `code_exec`, `shellmaster`, Discord, GitHub webhooks
+
+---
+
+## LLM Fallback Chain
+
+All LLM providers share one `llm_complete` tool. If a provider fails, the hub automatically walks the fallback chain defined in `.pyfun`:
+
+```
+anthropic → gemini → openrouter → huggingface
+```
+
+Fallbacks are configured per-provider, not hardcoded:
+
+```ini
+[LLM_PROVIDER.anthropic]
+fallback_to = "gemini"
+[LLM_PROVIDER.anthropic_END]
+
+[LLM_PROVIDER.gemini]
+fallback_to = "openrouter"
+[LLM_PROVIDER.gemini_END]
+```
+
+Same pattern applies to search providers (`brave → tavily`).
 
 ---
 
 ## Quick Start
 
-1. **Fork/Clone** this Repo (Space)
-2. Add your API keys as **Space Secrets** (Settings → Variables and secrets)
-3. Space starts automatically — only tools with valid keys are registered
+### HuggingFace Spaces (recommended)
 
-That's it. No config files to edit, no code to touch.
+1. Fork / duplicate this Space
+2. Go to **Settings → Variables and secrets**
+3. Add the API keys you have (any subset works)
+4. Space starts automatically — only tools with valid keys register
 
-[Demo for `cloning space`](https://huggingface.co/spaces/codey-lab/Universal-MCP-Hub-DEMO) on HF
+That's it. No config editing. No code changes.
+
+[→ Live Demo Space](https://huggingface.co/spaces/codey-lab/Universal-MCP-Hub-DEMO)
+
+### Local / Docker
+
+```bash
+git clone https://github.com/VolkanSah/Universal-MCP-Hub-sandboxed
+cd Universal-MCP-Hub-sandboxed
+cp example-mcp___.env .env
+# fill in your keys
+pip install -r requirements.txt
+python main.py
+```
+
+Minimum required ENV vars (everything else is optional):
+
+```env
+PYFUNDAMENTS_DEBUG=""
+LOG_LEVEL="INFO"
+LOG_TO_TMP=""
+ENABLE_PUBLIC_LOGS="true"
+HF_TOKEN=""
+HUB_SPACE_URL=""
+MCP_TRANSPORT="sse"
+```
 
 ---
 
-## Available Tools
+## Connect an MCP Client
 
-Tools are registered automatically based on which keys you configure. No key = tool doesn't exist. No crashes, no errors, no exposed secrets.
-
-| Secret | Tool | Description |
-| :--- | :--- | :--- |
-| `ANTHROPIC_API_KEY` | `llm_complete` | Claude Haiku / Sonnet / Opus |
-| `GEMINI_API_KEY` | `llm_complete` | Gemini Flash / Pro |
-| `OPENROUTER_API_KEY` | `llm_complete` | 100+ models via OpenRouter |
-| `HF_TOKEN` | `llm_complete` | HuggingFace Inference API |
-| `BRAVE_API_KEY` | `web_search` | Web Search (independent index) |
-| `TAVILY_API_KEY` | `web_search` | AI-optimized Search |
-| `DATABASE_URL` | `db_query` | Read-only DB access (SELECT only) |
-| *(always active)* | `list_active_tools` | Lists all currently active tools |
-| *(always active)* | `health_check` | System health + uptime |
-
-All LLM providers share a single `llm_complete` tool with automatic **fallback chain**: `anthropic → gemini → openrouter → huggingface`
-
----
-
-## MCP Client Configuration (SSE)
-
-Connect Claude Desktop or any MCP-compatible client:
+### Claude Desktop / any SSE-compatible client
 
 ```json
 {
@@ -74,7 +247,7 @@ Connect Claude Desktop or any MCP-compatible client:
 }
 ```
 
-For private Spaces, add your HF token:
+### Private Space (with HF token)
 
 ```json
 {
@@ -92,113 +265,104 @@ For private Spaces, add your HF token:
 ---
 
 ## Desktop Client
-#### Perfect for non-public spaces
 
+A full PySide6 desktop client is included in `DESKTOP_CLIENT/hub.py` — ideal for private or non-public Spaces where you don't want to expose the SSE endpoint.
 
-- A standalone PySide6 desktop client is included: `hub.py`, with help of ClaudeAi, was to lazy 😄
-- Features: Chat tab, Tools inspector, Settings (provider/model override, font size), Logs — all saved locally in `~/.mcp_desktop.json`. Token never leaves your machine except to your own Hub.
-- more about the [Desktop Client](DESKTOP_CLIENT/README.md)
-
----
-
-## Architecture
-```
-UMH
-├── main.py # run main!
-├── README.md
-├── ESOL
-├── LICENSE
-├── PyFundaments.md
-├── PyFundaments – Function Overview.md
-├── SECURITY.md
-├── requirements.txt
-├── .gitignore
-├── example.Dockerfile
-├── example-mcp___.env
-├── DESKTOP_CLIENT
-│   └── hub.py        ← light MCP Desktop client
-├── app/
-│   ├── __init__.py
-│   ├── app.py        ←  sandboxed Orchestrator
-│   ├── mcp.py        ← MCP SSE server (FastMCP + Quart)
-│   ├── tools.py      ← Tool registry (from .pyfun)
-│   ├── provider.py   ← LLM + Search execution + fallback
-│   ├── models.py     ← Model limits + costs
-│   ├── db_sync.py    ← Internal SQLite state (IPC)
-│   ├── config.py     ← .pyfun parser (single source of truth)
-│   └── .pyfun        ←  single source of truth
-├── fundaments/ # do not touch!
-│   ├── __init__.py
-│   ├── access_control.py
-│   ├── config_handler.py
-│   ├── encryption.py
-│   ├── postgresql.py
-│   ├── security.py
-│   └── user_handler.py
-└── docs/
-    ├── access_control.py.md
-    ├── encryption.py.md
-    ├── postgresql.py.md
-    ├── security.py.md
-    └── user_handler.py.md
-
-
-
+```bash
+pip install PySide6 httpx
+# optional file handling:
+pip install Pillow PyPDF2 pandas openpyxl
+python DESKTOP_CLIENT/hub.py
 ```
 
-**The Guardian pattern:** `app/*` never touches `os.environ`, `.env`, or `fundaments/` directly. Everything is injected by `main.py` as a validated `fundaments` dict. The sandbox is structural — not optional.
+**Features:**
+- Multi-chat with persistent history (`~/.mcp_desktop.json`)
+- Tool/Provider/Model selector loaded live from your Hub
+- File attachments: images, PDF, CSV, Excel, ZIP, source code
+- Connect tab with health check + auto-load
+- Settings: HF Token + Hub URL saved locally, never sent anywhere except your own Hub
+- Full request/response log with timestamps
+- Runs on Windows, Linux, macOS
+
+[→ Desktop Client docs](DESKTOP_CLIENT/README.md)
 
 ---
 
 ## Configuration (.pyfun)
 
-All app behavior is configured via `app/.pyfun` — a structured, human-readable config format:
+`app/.pyfun` is the single source of truth for all app behavior. Three tiers — use what you need:
 
-```ini
-[LLM_PROVIDER.anthropic]
-active           = "true"
-env_key          = "ANTHROPIC_API_KEY"
-default_model    = "claude-haiku-4-5-20251001"
-fallback_to      = "gemini"
-[LLM_PROVIDER.anthropic_END]
-
-[TOOL.llm_complete]
-active           = "true"
-provider_type    = "llm"
-default_provider = "anthropic"
-timeout_sec      = "60"
-[TOOL.llm_complete_END]
+```
+LAZY:       [HUB] + one [LLM_PROVIDER.*]                    → works
+NORMAL:     + [SEARCH_PROVIDER.*] + [MODELS.*]              → works better  
+PRODUCTIVE: + [TOOLS] + [HUB_LIMITS] + [DB_SYNC]           → full power
 ```
 
-Add a new tool/Provider/API_URL or something else just = edit `.pyfun` only. No code changes required.
+Adding a new LLM provider — edit `.pyfun` only, no code changes:
+
+```ini
+[LLM_PROVIDER.mistral]
+active        = "true"
+base_url      = "https://api.mistral.ai/v1"
+env_key       = "MISTRAL_API_KEY"
+default_model = "mistral-large-latest"
+models        = "mistral-large-latest, mistral-small-latest"
+fallback_to   = ""
+[LLM_PROVIDER.mistral_END]
+```
+
+Model limits, costs, and capabilities are also configured here — `get_model_info` reads directly from `.pyfun`:
+
+```ini
+[MODEL.claude-sonnet-4-6]
+provider           = "anthropic"
+context_tokens     = "200000"
+max_output_tokens  = "16000"
+requests_per_min   = "50"
+cost_input_per_1k  = "0.003"
+cost_output_per_1k = "0.015"
+capabilities       = "text, code, analysis, vision"
+[MODEL.claude-sonnet-4-6_END]
+```
 
 ---
 
 ## Security Design
 
-- All API keys via e.g. HF Space Secrets — never hardcoded, never in `.pyfun`
-- `list_active_tools` returns key **names** only, never values
-- DB tools are `SELECT`-only, enforced at application level
-- Direct execution of `app/*` is blocked by design
-- `app/*` has zero access to `fundaments/` internals
-- Built on [PyFundaments](PyFundaments.md) — security-first Python architecture
+- API keys live in HF Secrets / `.env` — never in `.pyfun`, never in code
+- `list_active_tools` returns key **names** only — never values
+- `db_query` is SELECT-only, enforced at application level (not just docs)
+- `app/*` has zero import access to `fundaments/` internals
+- Direct execution of `app/app.py` is blocked by design — prints a warning and uses a null-fundaments dict
+- `fundaments/` is initialized conditionally — missing services degrade gracefully, they don't crash
 
-> PyFundaments is not perfect. But it's more secure than most of what runs in production today!
+> PyFundaments is not perfect. But it's more secure than most of what runs in production today.
+
+[→ Full Security Policy](SECURITY.md)
 
 ---
 
 ## Foundation
 
-- [PyFundaments](PyFundaments.md) — Security-first Python boilerplate
-- [PyFundaments Function Overview](Fundaments-–-Function---Overview.md)
-- [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)
-- [SECURITY.md](SECURITY.md)
+This hub is built on [PyFundaments](PyFundaments.md) — a security-first Python boilerplate providing:
+
+- `config_handler.py` — env loading with validation
+- `postgresql.py` — async DB pool (Guardian-only)
+- `encryption.py` — key-based encryption layer
+- `access_control.py` — role/permission management
+- `user_handler.py` — user lifecycle management  
+- `security.py` — unified security manager composing the above
+
+None of these are accessible from `app/*`. They are injected as a validated dict by `main.py`.
+
+[→ PyFundaments Function Overview](PyFundaments%20–%20Function%20Overview.md)  
+[→ Module Docs](docs/)
 
 ---
 
 ## History
 
-[ShellMaster](https://github.com/VolkanSah/ChatGPT-ShellMaster) (2023, archived, MIT) was the precursor — a browser-accessible shell for ChatGPT with session memory via `/tmp/shellmaster_brain.log`, built before MCP was a word. Universal MCP Hub is its natural evolution.
+[ShellMaster](https://github.com/VolkanSah/ChatGPT-ShellMaster) (2023, MIT) was the precursor — browser-accessible shell for ChatGPT with session memory via `/tmp/shellmaster_brain.log`, built before MCP was even a concept. Universal MCP Hub is its natural evolution.
 
 ---
 
@@ -209,10 +373,12 @@ Dual-licensed:
 - [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0)
 - [Ethical Security Operations License v1.1 (ESOL)](ESOL) — mandatory, non-severable
 
-By using this software you agree to all ethical constraints defined in ESOL v1.1. Misuse may result in automatic license termination and legal liability.
+By using this software you agree to all ethical constraints defined in ESOL v1.1.
 
 ---
 
-*Architecture, security decisions, and PyFundaments by Volkan Kücükbudak. Built with Claude (Anthropic) as a typing assistant for docs & some bugs*
+*Architecture, security decisions, and PyFundaments by Volkan Kücükbudak.*  
+*Built with Claude (Anthropic) as a typing assistant for docs & the occasional bug.*
 
-> crafted with passion by Volkan Kücükbudak - just want to feel how it works, mean i do not need it, have cli 😄
+> crafted with passion — just wanted to understand how it works, don't actually need it, have a CLI 😄
+
