@@ -24,6 +24,8 @@ Most MCP servers are prompts dressed up as servers. This one has a real architec
 
 ## Why this exists
 
+First have a look on this new project from BadTin & Me [Wall-of-Shames](https://github.com/Wall-of-Shames?view_as=public)
+
 The MCP ecosystem is full of servers with hardcoded keys, zero sandboxing, and `os.environ` scattered everywhere. One misconfigured fork and your API keys are gone.
 
 This hub was built as the antidote:
