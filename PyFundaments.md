@@ -136,12 +136,12 @@ Each security-relevant core module is documented in the `docs/` directory:
 
 | Module              | Description                              | Documentation                                     |
 | ------------------- | ---------------------------------------- | -------------------------------------------------|
-| `access_control.py` | Role-based access management             | [access\_control.py.md](docs/access_control.py.md)|
-| `config_handler.py` | Universal configuration loader           | [config\_handler.py.md](docs/config_handler.py.md)|
-| `encryption.py`     | Cryptographic routines                   | [encryption.py.md](docs/encryption.py.md)         |
-| `postgresql.py`     | Secure, asynchronous database access     | [postgresql.py.md](docs/postgresql.py.md)         |
-| `user_handler.py`   | Authentication and identity management   | [user\_handler.py.md](docs/user_handler.py.md)     |
-| `security.py`       | Central security orchestration layer     | [security.py.md](docs/security.py.md)             |
+| `access_control.py` | Role-based access management             | [access\_control.py.md](docs/fundaments/access_control.py.md)|
+| `config_handler.py` | Universal configuration loader           | [config\_handler.py.md](docs/fundaments/config_handler.py.md)|
+| `encryption.py`     | Cryptographic routines                   | [encryption.py.md](docs/fundaments/encryption.py.md)         |
+| `postgresql.py`     | Secure, asynchronous database access     | [postgresql.py.md](docs/fundaments/postgresql.py.md)         |
+| `user_handler.py`   | Authentication and identity management   | [user\_handler.py.md](docs/fundaments/user_handler.py.md)     |
+| `security.py`       | Central security orchestration layer     | [security.py.md](docs/fundaments/security.py.md)             |
 
 -----
 
