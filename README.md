@@ -9,7 +9,7 @@ license: apache-2.0
 short_description: 'Sandboxed Universal MCP Server built on PyFundaments'
 ---
 
-# Universal MCP Hub (Sandboxed)
+# (Not a-) Universal MCP Hub (Sandboxed)
 ##### ... or universal AI Wrapper over sse + quart and some tools on a fundament, as a clean starting point for your projects :D
 
 > A production-grade MCP server that actually thinks about security.  
