@@ -10,6 +10,7 @@ short_description: 'Sandboxed Universal MCP Server built on PyFundaments'
 ---
 
 # Universal MCP Hub (Sandboxed)
+##### ... or universal AI Wrapper over sse + quart and some tools on a fundament!
 
 > A production-grade MCP server that actually thinks about security.  
 > Built on [PyFundaments](PyFundaments.md) — running on **simpleCity** and **paranoidMode**.
