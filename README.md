@@ -171,7 +171,7 @@ Tools register themselves at startup — only if the required API key exists in 
 | `HF_TOKEN` | `llm_complete` | HuggingFace Inference API |
 | `BRAVE_API_KEY` | `web_search` | Independent web index |
 | `TAVILY_API_KEY` | `web_search` | AI-optimized search with synthesized answers |
-| `DATABASE_URL` | `db_query` | Read-only SELECT — enforced at app level |
+| `DATABASE_URL` | `cloud DB` | e.g. HF
 | *(always)* | `list_active_tools` | Shows key names only — never values |
 | *(always)* | `health_check` | Status + uptime |
 | *(always)* | `get_model_info` | Limits, costs, capabilities per model |
