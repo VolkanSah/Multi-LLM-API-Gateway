@@ -22,21 +22,20 @@
 # HUB — Core identity & transport config
 # =============================================================================
 [HUB]
-HUB_NAME            = "Universal MCP Hub"
-HUB_VERSION         = "1.0.0"
-HUB_DESCRIPTION     = "Universal MCP Hub built on PyFundaments"
+HUB_NAME            = "Multi-LLM-API-Gateway"
+HUB_VERSION         = "1.0.1"
+HUB_DESCRIPTION     = "Universal Hub built on PyFundaments"
 
-# Transport: stdio (local/Claude Desktop) | sse (HuggingFace/Remote)
-# Override via ENV: MCP_TRANSPORT
-HUB_TRANSPORT       = "sse"
+# Transport: sse (legacy/HF Spaces fallback) | streamable-http (MCP spec 2025-11-25)
+HUB_TRANSPORT       = "streamable-http"
+
+# Stateless: true = HF Spaces + horizontal scaling safe
+# false = nur wenn du Server-initiated Notifications brauchst
+HUB_STATELESS       = "true"
+
 HUB_HOST            = "0.0.0.0"
 HUB_PORT            = "7860"
-
-# App mode: mcp | app
-# Override via ENV: APP_MODE
 HUB_MODE            = "mcp"
-
-# HuggingFace Space URL (used as HTTP-Referer for some APIs)
 HUB_SPACE_URL       = ""
 [HUB_END]
 
