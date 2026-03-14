@@ -16,22 +16,22 @@ The module enforces strict **table ownership**: it only manages `hub_state` and 
 
 
 
-### Bald
+### commands
 
-Zwei Tabellen zum Testen:
+two Tabelles for testing:
 - `hub_state` — key/value store
 - `tool_cache` — gecachte Tool-Responses
 
-Test-Fragen für den Showcase mit dem HUb
+Test inputs
 
-**hub_state testen:**
+**hub_state test:**
 ```
 [db_query]: SELECT * FROM hub_state
 [db_query]: SELECT key, value FROM hub_state WHERE key = 'test'
 [db_query]: SELECT count(*) FROM hub_state
 ```
 
-**tool_cache testen:**
+**tool_cache test:**
 ```
 [db_query]: SELECT * FROM tool_cache
 [db_query]: SELECT tool_name, prompt, provider FROM tool_cache
@@ -40,7 +40,7 @@ Test-Fragen für den Showcase mit dem HUb
 [db_query]: SELECT * FROM tool_cache ORDER BY created_at DESC LIMIT 5
 ```
 
-**Security Test (sollte REJECT geben):**
+**Security Test (must REJECT):**
 ```
 [db_query]: SELECT * FROM users
 [db_query]: DROP TABLE hub_state
@@ -48,5 +48,5 @@ Test-Fragen für den Showcase mit dem HUb
 [db_query]: from hub_state
 ```
 
-Die letzten vier sind wichtig den es zeigt dass der Hub sich schützt! 
+
 
