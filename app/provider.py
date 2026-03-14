@@ -106,7 +106,45 @@ class BaseProvider:
 # SECTION 2 — LLM Provider Implementations
 # Only the API-specific parsing logic differs per provider.
 # =============================================================================
+# --- SmolLM2 (Custom Assistant HF Space) ----------------------------------------
+# =============================================================================
+class SmolLMProvider(BaseProvider):
+    """
+    SmolLM2 Custom Assistant Space — OpenAI-compatible, ADI routing included.
+    Free tier on HF Spaces (CPU). Falls back to next provider on 503.
+    Response includes extra 'adi' field with score + decision (ignored by hub).
+    Deploy: https://github.com/VolkanSah/Multi-LLM-API-Gateway (smollm-space/)
 
+    .pyfun block:
+        [LLM_PROVIDER.smollm]
+        active        = "true"
+        base_url      = "https://codey-lab-SmolLM2-customs.hf.space/v1"
+        env_key       = "SMOLLM_API_KEY"
+        default_model = "smollm2-360m"
+        models        = "smollm2-360m, codey-lab/model.universal-mcp-hub"
+        fallback_to   = "anthropic"
+        [LLM_PROVIDER.smollm_END]
+    """
+
+    async def complete(self, prompt: str, model: str = None, max_tokens: int = 150) -> str:
+        data = await self._post(
+            f"{self.base_url}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {self.key}",
+                "X-IP-Token":     self.key, 
+                "content-type":  "application/json",
+            },
+            payload={
+                "model":      model or self.model,
+                "max_tokens": max_tokens,
+                "messages":   [{"role": "user", "content": prompt}],
+            },
+        )
+        return data["choices"][0]["message"]["content"]
+
+# =============================================================================
+# --- Anthropic (Claude) ------------- ----------------------------------------
+# =============================================================================
 class AnthropicProvider(BaseProvider):
     """Anthropic Claude API — Messages endpoint."""
 
@@ -127,7 +165,9 @@ class AnthropicProvider(BaseProvider):
         )
         return data["content"][0]["text"]
 
-
+# =============================================================================
+# --- Gemini ------------------------------------------------------------------
+# =============================================================================
 class GeminiProvider(BaseProvider):
     """Google Gemini API — generateContent endpoint."""
 
@@ -152,7 +192,9 @@ class GeminiProvider(BaseProvider):
                 ) from None
             return r.json()["candidates"][0]["content"]["parts"][0]["text"]
 
-
+# =============================================================================
+# --- OpenRouter --------------------------------------------------------------
+# =============================================================================
 class OpenRouterProvider(BaseProvider):
     """OpenRouter API — OpenAI-compatible chat completions endpoint.
     
@@ -177,7 +219,9 @@ class OpenRouterProvider(BaseProvider):
         )
         return data["choices"][0]["message"]["content"]
 
-
+# =============================================================================
+# --- HuggingFace -------------------------------------------------------------
+# =============================================================================
 class HuggingFaceProvider(BaseProvider):
     """HuggingFace Inference API — OpenAI-compatible serverless endpoint.
     
@@ -309,6 +353,7 @@ class HuggingFaceProvider(BaseProvider):
 # =============================================================================
 
 _PROVIDER_CLASSES = {
+    "smollm":      SmolLMProvider,  # ← customs LLM on HF
     "anthropic":   AnthropicProvider,
     "gemini":      GeminiProvider,
     "openrouter":  OpenRouterProvider,
