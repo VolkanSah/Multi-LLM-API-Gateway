@@ -85,17 +85,32 @@ SEARCH_TIMEOUT_SEC      = "30"
   env_key             = "OPENROUTER_API_KEY"      # → .env: OPENROUTER_API_KEY=sk-or-...
   default_model       = "nvidia/nemotron-nano-9b-v2:free"
   models              = "meta-llama/llama-3-8b-instruct, mistralai/mistral-7b-instruct, nvidia/nemotron-nano-9b-v2:free, google/gemma-3-27b-it:free, openai/gpt-oss-20b:free, mistralai/Mistral-7B-Instruct-v0.3, meta-llama/Llama-3.3-70B-Instruct"
-  fallback_to         = "huggingface"                        
+  fallback_to         = "" # last in chain, no further fallback                       
   [LLM_PROVIDER.openrouter_END]
 
   [LLM_PROVIDER.huggingface]
-  active             = "true"
+  active             = "false"
   base_url           = "https://api-inference.huggingface.co/v1"
   env_key            = "HF_TOKEN"                # → .env: HF_TOKEN=hf_...
   default_model = "meta-llama/Llama-3.1-8B-Instruct"
   models        = "meta-llama/Llama-3.1-8B-Instruct, mistralai/Mistral-Nemo-Instruct-2407, Qwen/Qwen2.5-72B-Instruct"
   fallback_to        = "" # last in chain, no further fallback
   [LLM_PROVIDER.huggingface_END]
+
+  # ── OWN LLM EXAMPLE ──────────────────────────────────────────
+  # Only for example how to ad own openai compatible LLM API 
+  # Please read : https://github.com/VolkanSah/SmolLM2-customs/
+  # set it up and change settings here. 
+  # Nice small LLM on free 2 CPU tier as assi
+  # ── smollm selhosted on HF  ──────────────────────────────────
+  [LLM_PROVIDER.smollm]
+  active        = "false"
+  base_url      = "https://your-account-smollm2-customs.hf.space/v1"
+  env_key       = "SMOLLM_API_KEY"
+  default_model = "smollm2-360m"
+  models        = "smollm2-360m, your-account/model.smollm2-customs"
+  fallback_to   = "gemini"
+  [LLM_PROVIDER.smollm_END]
 
   # ── Add more LLM providers below ──────────────────────────────────────────
   # [LLM_PROVIDER.mistral]
@@ -298,17 +313,6 @@ SEARCH_TIMEOUT_SEC      = "30"
   capabilities        = "uncensored, text, code, fast, very cheap"
   [MODEL.dolphin-mistral-24b-venice-edition_END]
 
-  [MODEL.deepseek-chat-v3.1]
-  provider            = "openrouter"
-  context_tokens      = "163840"
-  max_output_tokens   = "8192"
-  requests_per_min    = ""
-  requests_per_day    = ""
-  cost_input_per_1k   = "0.00000"
-  cost_output_per_1k  = "0.00000"
-  capabilities        = "text, code, reasoning, fast, free"
-  [MODEL.deepseek-chat-v3.1_END]
-
   [MODEL.nvidia-nemotron-nano-9b-v2]
   provider            = "openrouter"
   context_tokens      = "131072"
@@ -342,28 +346,6 @@ SEARCH_TIMEOUT_SEC      = "30"
   capabilities        = "text, code, free"
   [MODEL.gpt-oss-20b_END]
 
-  [MODEL.qwen3-coder]
-  provider            = "openrouter"
-  context_tokens      = "262144"
-  max_output_tokens   = "8192"
-  requests_per_min    = ""
-  requests_per_day    = ""
-  cost_input_per_1k   = "0.00000"
-  cost_output_per_1k  = "0.00000"
-  capabilities        = "text, code, agentic, long-context, free"
-  [MODEL.qwen3-coder_END]
-
-  [MODEL.qwen2.5-vl-72b-instruct]
-  provider            = "openrouter"
-  context_tokens      = "131072"
-  max_output_tokens   = "8192"
-  requests_per_min    = ""
-  requests_per_day    = ""
-  cost_input_per_1k   = "0.00000"
-  cost_output_per_1k  = "0.00000"
-  capabilities        = "text, code, vision, multilingual, free"
-  [MODEL.qwen2.5-vl-72b-instruct_END]
-
   [MODEL.deephermes-3-llama-3-8b-preview]
   provider            = "openrouter"
   context_tokens      = "131072"
@@ -396,6 +378,29 @@ SEARCH_TIMEOUT_SEC      = "30"
   cost_output_per_1k  = "0.00030"
   capabilities        = "text, code, reasoning, multilingual"
   [MODEL.Llama-3.3-70B-Instruct_END]
+
+  # customs llms
+  [MODEL.smollm2-360m]
+  provider           = "smollm"
+  context_tokens     = "8192"
+  max_output_tokens  = "300"
+  requests_per_min   = "60"
+  requests_per_day   = "10000"
+  cost_input_per_1k  = "0.00000"
+  cost_output_per_1k = "0.00000"
+  capabilities       = "text, assistant, navigation, free, local"
+  [MODEL.smollm2-360m_END]
+
+  [MODEL.codey-lab/model.universal-mcp-hub]
+  provider           = "smollm"
+  context_tokens     = "8192"
+  max_output_tokens  = "300"
+  requests_per_min   = "60"
+  requests_per_day   = "10000"
+  cost_input_per_1k  = "0.00000"
+  cost_output_per_1k = "0.00000"
+  capabilities       = "text, assistant, navigation, free, custom, finetuned"
+  [MODEL.codey-lab/model.universal-mcp-hub_END]
 
 [MODELS_END]
 
