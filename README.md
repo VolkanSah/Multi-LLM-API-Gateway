@@ -9,10 +9,11 @@ license: apache-2.0
 short_description: 'Secure Multi-LLM Gateway — (Streamable HTTP / SSE)'
 ---
 
-# Multi-LLM API Gateway (AI HUB)
+# (AI HUB) - LLM API Gateway 
 
-— or Universal MCP Hub (Sandboxed)  
-— or secure AI wrapper with dual interface: REST + (FAST)MCP
+- or advanced Universal MCP Hub (Sandboxed)
+- or secure AI wrapper with dual interface: REST + (FAST)MCP and many more
+- or own AI HUB Server for local, Huggingface or similar
 
 aka: a clean, secure starting point for your own projects.  
 Pick the description that fits your use case. They're all correct.
@@ -24,8 +25,8 @@ Pick the description that fits your use case. They're all correct.
 No key → no tool → no crash → no exposed secrets
 ```
 
-> [!WARNING]
-> Most MCP servers are prompts dressed up as servers. This one has a real architecture.
+> [!TIP]
+> Most MCP servers are prompts dressed up as servers. This is not an simple MCP server, it has a real architecture.
 
 ---
 
@@ -37,11 +38,11 @@ No key → no tool → no crash → no exposed secrets
 
 ## Why this exists
 
-The AI ecosystem is full of servers with hardcoded keys, `os.environ` scattered everywhere, zero sandboxing. One misconfigured fork and your API keys are gone.
+The AI ecosystem is full of servers with hardcoded keys, `os.environ` scattered everywhere, zero sandboxing. One misconfigured fork and your API keys are gone or just 100 % AI crafted buggy code!
 
-This is exactly the kind of negligence (and worse — outright fraud) that [Wall of Shames](https://github.com/Wall-of-Shames) documents: fake "AI tools" exploiting non-technical users — API wrappers dressed up as custom models, Telegram payment funnels, bought stars. If you build on open source, you should know this exists.
+This is exactly the kind of negligence (and worse — outright fraud) that [Wall of Shames](https://github.com/Wall-of-Shames) documents: fake "AI tools" exploiting non-technical users over social network (Meta/TikTok) — API wrappers dressed up as custom models, Telegram payment funnels, bought stars. If you build on open source, you should know this exists.
 
-This hub is the antidote:
+**This hub is the antidote:**
 
 - **Structural sandboxing** — `app/*` can never touch `fundaments/` or `.env`. Not by convention. By design.
 - **Guardian pattern** — `main.py` is the only process that reads secrets. It injects validated services as a dict. `app/*` never sees the raw environment.
@@ -80,7 +81,7 @@ Full MCP protocol — tool discovery, structured calls, streaming responses.
 **Primary transport: Streamable HTTP** (MCP spec 2025-11-25)  
 **Fallback transport: SSE** (legacy, configurable via `.pyfun`)
 
-Configured via `HUB_TRANSPORT` in `app/.pyfun [HUB]`:
+Configured via `HUB_TRANSPORT` in `app/.pyfun [HUB]` or in .env (.env files are given priority and override .pyfun files)
 
 ```ini
 HUB_TRANSPORT = "streamable-http"   # default — MCP spec 2025-11-25
@@ -91,7 +92,8 @@ Used by: Claude Desktop, Cursor, Windsurf, any MCP-compatible client.
 
 ---
 
-## Architecture
+## Architecture of the app
+
 
 ```
 main.py (Guardian)
@@ -114,6 +116,8 @@ main.py (Guardian)
      └── app/db_sync.py     ← Internal SQLite IPC (app/* state only)
                               ≠ fundaments/postgresql.py (Guardian-only)
 ```
+
+Whole project structure [PROJECT_STRUCTURE](PROJECT_STRUCTURE.md)
 
 **The sandbox is structural:**
 
@@ -238,8 +242,8 @@ system_prompt    = "You are an expert code reviewer. Analyze the given code for 
 [TOOL.code_review_END]
 ```
 
-Current built-in tools: `llm_complete`, `code_review`, `summarize`, `translate`, `web_search`, `db_query`  
-Future hooks (commented, ready): `image_gen`, `code_exec`, `shellmaster_2.0`, Discord, GitHub webhooks
+Current built-in tools: `llm_complete`, `code_review`, `summarize`, `translate`, `web_search`, `db_query` , `persist_result`
+Future hooks (commented, ready): `image_gen`, `code_exec`, `shellmaster`, Discord, GitHub webhooks
 
 ---
 
@@ -389,6 +393,10 @@ python DESKTOP_CLIENT/hub.py
 
 ## Configuration (.pyfun)
 
+> [!CAUTION]
+> **To ensure security, store sensitive information in .env secrets. These values override any corresponding settings in .pyfun. Under no circumstances should API keys be committed to public repositories.**
+
+
 `app/.pyfun` is the single source of truth for all app behavior. Three tiers:
 
 ```
@@ -461,7 +469,7 @@ requests         — sync HTTP for tool workers
 
 ## Security Design
 
-- API keys live in HF Secrets / `.env` — never in `.pyfun`, never in code
+- API keys live in Secrets / `.env` — never in `.pyfun`, never in code
 - `list_active_tools` returns key **names** only — never values
 - `db_query` is SELECT-only, enforced at application level (not just docs)
 - `app/*` has zero import access to `fundaments/` internals
@@ -521,6 +529,6 @@ By using this software you agree to all ethical constraints defined in ESOL v1.1
 ---
 
 *Architecture, security decisions, and PyFundaments by Volkan Kücükbudak.*  
-*Built with Claude (Anthropic) as a typing assistant for docs (and the occasional bug).*
+*AI HUB Ökosystem Built with help of Claude (Anthropic) as a typing assistant for docs (and the occasional bug).*
 
 > crafted with passion — just wanted to understand how it works, don't actually need it, have a CLI 😄
